@@ -1,0 +1,1215 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>한국 시 감정 지도</title>
+    <!-- Chart.js 라이브러리 (레이더 차트용) -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        /* 화이트 & 딥 네이비 대시보드 테마 */
+        :root {
+            --bg-color: #F8FAFC;
+            --text-main: #1E293B;
+            --text-muted: #64748B;
+            --primary: #0F172A;
+            --primary-light: #1E293B;
+            --card-bg: #FFFFFF;
+            --border: #E2E8F0;
+            --accent: #2563EB;
+        }
+        body {
+            margin: 0; font-family: 'Pretendard', -apple-system, sans-serif;
+            background-color: var(--bg-color); color: var(--text-main);
+        }
+        header {
+            background-color: var(--primary); color: white;
+            padding: 1.2rem 2rem; display: flex; align-items: center;
+        }
+        header h1 { margin: 0; font-size: 1.4rem; font-weight: 600; }
+        
+        .container {
+            display: grid;
+            grid-template-columns: 270px 1fr 400px;
+            gap: 24px; padding: 24px; max-width: 1600px; margin: 0 auto;
+        }
+
+        /* 왼쪽 시 목록 및 직접 입력 영역 */
+        .sidebar { background: var(--card-bg); border-radius: 12px; padding: 20px; border: 1px solid var(--border); height: fit-content; }
+        .sidebar h2 { font-size: 1.1rem; margin-top: 0; border-bottom: 2px solid var(--primary); padding-bottom: 12px; }
+        .poem-list { list-style: none; padding: 0; margin: 0; }
+        .poem-list li {
+            padding: 11px 12px; border-radius: 8px; cursor: pointer; margin-bottom: 6px;
+            color: var(--text-muted); transition: all 0.2s; font-size: 0.95rem;
+        }
+        .poem-list li:hover { background: #F1F5F9; color: var(--text-main); }
+        .poem-list li.active { background: var(--primary); color: white; font-weight: 600; }
+
+        /* 내 시 분석하기 입력 박스 */
+        .custom-poem-box {
+            margin-top: 20px; padding-top: 18px; border-top: 2px solid var(--border);
+            white-space: normal;
+        }
+        .custom-poem-box h3 {
+            margin: 0 0 10px 0; font-size: 1rem; color: var(--primary);
+        }
+        .custom-input, .custom-textarea {
+            width: 100%; box-sizing: border-box; padding: 10px 12px;
+            border: 1px solid #CBD5E1; border-radius: 8px; font-family: inherit;
+            font-size: 0.9rem; color: var(--text-main); background: #F8FAFC;
+            margin-bottom: 8px; transition: border-color 0.2s, background 0.2s;
+        }
+        .custom-input:focus, .custom-textarea:focus {
+            outline: none; border-color: var(--accent); background: #FFFFFF;
+        }
+        .custom-textarea { resize: vertical; min-height: 110px; line-height: 1.5; }
+        .custom-btn {
+            width: 100%; padding: 11px; border: none; border-radius: 8px;
+            background: var(--primary); color: #FFFFFF; font-size: 0.95rem;
+            font-weight: 600; cursor: pointer; transition: background 0.2s;
+        }
+        .custom-btn:hover { background: #1E3A8A; }
+        .custom-hint {
+            margin: 8px 0 0 0; font-size: 0.78rem; color: var(--text-muted); line-height: 1.45;
+        }
+
+        /* 가운데 본문 영역 */
+        .main-content { background: var(--card-bg); border-radius: 12px; padding: 30px; border: 1px solid var(--border); }
+        .main-content h2 { margin-top: 0; font-size: 2rem; color: var(--primary); margin-bottom: 10px; }
+        .main-content p.meta { color: var(--text-muted); font-size: 1rem; margin-bottom: 30px; border-bottom: 1px solid var(--border); padding-bottom: 20px; }
+        .poem-text { line-height: 2.2; font-size: 1.15rem; white-space: pre-wrap; color: #334155; }
+
+        /* 감지된 근거 시어 및 미감지 안내 배너 */
+        .detected-words-box {
+            margin-top: 28px; padding-top: 18px; border-top: 1px dashed var(--border);
+            font-size: 0.9rem; color: var(--text-muted); display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+        }
+        .word-chip {
+            display: inline-flex; align-items: center; gap: 5px;
+            padding: 4px 10px; border-radius: 14px; font-size: 0.82rem; font-weight: 600; color: var(--text-main);
+        }
+        .no-match-banner {
+            margin-top: 24px; padding: 16px 18px; border-radius: 10px;
+            background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B;
+            font-size: 0.93rem; line-height: 1.6;
+        }
+
+        /* 오른쪽 대시보드 카드 영역 */
+        .dashboard { display: flex; flex-direction: column; gap: 20px; }
+        .card { background: var(--card-bg); border-radius: 12px; padding: 20px; border: 1px solid var(--border); box-shadow: 0 1px 3px rgba(0,0,0,0.05); }
+        .card h3 { margin-top: 0; font-size: 1.1rem; border-bottom: 1px solid var(--border); padding-bottom: 12px; margin-bottom: 16px; color: var(--primary); }
+        
+        /* 가중치 슬라이더 스타일 */
+        .weight-control { background: #F1F5F9; padding: 16px; border-radius: 8px; border: 1px solid var(--border); }
+        .weight-header { font-size: 0.95rem; font-weight: 600; color: var(--primary); margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center; }
+        .weight-badge { background: var(--primary); color: white; padding: 2px 10px; border-radius: 12px; font-size: 0.85rem; }
+        input[type="range"] {
+            width: 100%; accent-color: #1E3A8A; cursor: pointer; height: 6px; margin: 8px 0;
+        }
+        input[type="range"]:disabled { opacity: 0.45; cursor: not-allowed; }
+        .weight-labels { display: flex; justify-content: space-between; font-size: 0.85rem; color: var(--text-main); font-weight: 500; margin-top: 4px; }
+        .weight-formula { font-size: 0.8rem; color: var(--text-muted); margin-top: 12px; padding-top: 10px; border-top: 1px dashed #CBD5E1; line-height: 1.4; }
+
+        /* 특정 카드 포인트 스타일 */
+        .card-match { border-top: 4px solid var(--accent); }
+        .card-recommend { border-top: 4px solid #8B5CF6; }
+        .card-recommend a { display: block; padding: 8px 12px; background: #F8FAFC; border: 1px solid var(--border); border-radius: 6px; text-decoration: none; color: var(--primary); margin-bottom: 8px; font-weight: 500; transition: background 0.2s; }
+        .card-recommend a:hover { background: #E2E8F0; }
+
+        /* 감정 하이라이트 색상 및 딜레이 없는 즉각 툴팁 */
+        [class^="emo-"] {
+            position: relative;
+            font-weight: bold;
+            border-radius: 3px;
+            padding: 0 2px;
+            cursor: default;
+        }
+        [class^="emo-"]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 125%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: var(--primary);
+            color: #FFFFFF;
+            padding: 5px 10px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            font-weight: 500;
+            white-space: nowrap;
+            z-index: 100;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+            pointer-events: none;
+        }
+        .emo-sad { background-color: #BFDBFE; }
+        .emo-yearn { background-color: #DDD6FE; }
+        .emo-will { background-color: #FECACA; }
+        .emo-reflect { background-color: #D9F99D; }
+        .emo-love { background-color: #FBCFE8; }
+        .emo-lonely { background-color: #E5E7EB; }
+        .emo-hope { background-color: #FEF08A; }
+        .emo-resent { background-color: #FCA5A5; }
+        .emo-peace { background-color: #A7F3D0; }
+
+        /* 막대 차트 스타일 */
+        .bar-container { width: 100%; background: #F1F5F9; border-radius: 6px; margin-bottom: 12px; overflow: hidden; }
+        .bar-fill { height: 16px; border-radius: 6px; transition: width 0.2s ease; }
+        
+        .chart-container { position: relative; height: 260px; width: 100%; }
+
+        /* 감정 프로필 확대 기능 및 중앙 모달 */
+        .card-radar { cursor: pointer; transition: transform 0.15s ease, box-shadow 0.15s ease; }
+        .card-radar:hover { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(15, 23, 42, 0.1); }
+        .zoom-hint { float: right; font-size: 0.8rem; font-weight: 500; color: var(--accent); background: #EFF6FF; padding: 2px 8px; border-radius: 12px; }
+
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.7);
+            z-index: 1000;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            box-sizing: border-box;
+            backdrop-filter: blur(2px);
+        }
+        .modal-overlay.show { display: flex; }
+        .modal-content {
+            background: #FFFFFF;
+            border-radius: 16px;
+            padding: 24px;
+            width: 100%;
+            max-width: 620px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.25);
+            animation: modalPop 0.18s ease-out;
+        }
+        @keyframes modalPop {
+            from { opacity: 0; transform: scale(0.94); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+        .modal-header h3 { margin: 0; font-size: 1.2rem; color: var(--primary); }
+        .modal-close {
+            background: #F1F5F9; border: none; border-radius: 8px;
+            width: 32px; height: 32px; font-size: 1.1rem; cursor: pointer;
+            color: var(--text-main); display: flex; align-items: center; justify-content: center;
+        }
+        .modal-close:hover { background: #E2E8F0; }
+        .modal-chart-wrapper { position: relative; height: 420px; width: 100%; }
+
+        /* 모바일 및 태블릿 대응 */
+        @media (max-width: 1200px) {
+            .container { grid-template-columns: 240px 1fr; }
+            .dashboard { grid-column: 1 / -1; display: grid; grid-template-columns: 1fr 1fr; }
+        }
+        @media (max-width: 768px) {
+            .container { grid-template-columns: 1fr; }
+            .dashboard { grid-template-columns: 1fr; }
+            .poem-list { display: flex; gap: 8px; overflow-x: auto; white-space: nowrap; padding-bottom: 6px; }
+            .poem-list li { margin-bottom: 0; flex-shrink: 0; }
+            .modal-chart-wrapper { height: 310px; }
+        }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>한국 시 감정 지도</h1>
+</header>
+
+<div class="container">
+    <!-- 왼쪽: 시 목록 + 내 시 분석하기 입력창 -->
+    <aside class="sidebar">
+        <h2>수록 작품 (15편)</h2>
+        <ul class="poem-list" id="poemList"></ul>
+
+        <div class="custom-poem-box">
+            <h3>✍️ 내 시 분석하기</h3>
+            <input type="text" id="customTitle" class="custom-input" placeholder="시 제목을 입력하세요">
+            <textarea id="customText" class="custom-textarea" placeholder="분석할 시 본문을 직접 입력하세요..."></textarea>
+            <button type="button" class="custom-btn" onclick="analyzeCustomPoem()">분석하기</button>
+            <p class="custom-hint">직접 입력한 시는 감정 사전으로만 분석하고, 15편 중 가장 비슷한 시를 추천합니다.</p>
+        </div>
+    </aside>
+
+    <!-- 가운데: 시 본문 -->
+    <main class="main-content">
+        <h2 id="poemTitle">제목</h2>
+        <p class="meta" id="poemMeta">시인 | 발표연도 | 출처</p>
+        <div class="poem-text" id="poemText">시 본문 영역</div>
+        <div id="customExtraArea"></div>
+    </main>
+
+    <!-- 오른쪽: 분석 대시보드 -->
+    <aside class="dashboard">
+        <!-- 0. 분석 가중치 조절 카드 (0~100% 자유 조절, 기본값 50%) -->
+        <div class="card">
+            <h3>⚖️ 분석 가중치</h3>
+            <div class="weight-control">
+                <div class="weight-header">
+                    <span>감정 사전 반영 비율</span>
+                    <span class="weight-badge" id="weightValueText">50%</span>
+                </div>
+                <input type="range" id="weightSlider" min="0" max="100" step="1" value="50">
+                <div class="weight-labels">
+                    <span>해석 중심</span>
+                    <span>사전 중심</span>
+                </div>
+                <div class="weight-formula" id="weightFormulaText">
+                    최종 점수 = 해석 기반 프로필 × (1 - w) + 감정 사전 점수 × w
+                </div>
+            </div>
+        </div>
+
+        <!-- 1. 지배 정서 막대 차트 -->
+        <div class="card">
+            <h3>지배 정서 비율</h3>
+            <div id="emotionBars"></div>
+        </div>
+
+        <!-- 2. 감상과 해석 -->
+        <div class="card">
+            <h3>감상과 해석</h3>
+            <p style="margin-top:0; color:var(--text-muted); font-size:0.95rem;"><strong>주제:</strong> <span id="poemTheme"></span></p>
+            <p id="poemInterp" style="line-height: 1.7; font-size:0.95rem; margin-bottom:0;"></p>
+        </div>
+
+        <!-- 3. 독자 상태 매칭 (독립된 구역) -->
+        <div class="card card-match">
+            <h3>💡 독자 상태 매칭</h3>
+            <p id="readerMatchText" style="line-height: 1.6; font-size: 0.95rem; color: var(--text-main); margin: 0;"></p>
+        </div>
+
+        <!-- 4. 비슷한 감성의 시 추천 (독립된 구역) -->
+        <div class="card card-recommend">
+            <h3>📚 비슷한 감성의 시 추천</h3>
+            <div id="recommendList"></div>
+        </div>
+
+        <!-- 5. 감정 프로필 레이더 차트 (클릭/터치 시 확대) -->
+        <div class="card card-radar" onclick="openRadarModal()">
+            <h3>감정 프로필 <span class="zoom-hint">🔍 클릭하여 확대</span></h3>
+            <div class="chart-container">
+                <canvas id="radarChart"></canvas>
+            </div>
+        </div>
+    </aside>
+
+    <!-- 감정 프로필 중앙 확대 모달 -->
+    <div id="radarModal" class="modal-overlay" onclick="closeRadarModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="modalRadarTitle">감정 프로필 상세</h3>
+                <button class="modal-close" onclick="closeRadarModal()" aria-label="닫기">✕</button>
+            </div>
+            <div class="modal-chart-wrapper">
+                <canvas id="modalRadarChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // 1. 감정 범주 9개
+    const EMOS = {
+        sad: { name: '비애·슬픔', color: '#3B82F6', bg: '#BFDBFE', match: '상실감이나 깊은 슬픔을 겪고 있어, 누군가의 진심 어린 공감과 위로가 필요하신 분' },
+        yearn: { name: '그리움·향수', color: '#8B5CF6', bg: '#DDD6FE', match: '부재하는 누군가나 다시 돌아갈 수 없는 과거의 시간들이 몹시 애틋하게 떠오르는 분' },
+        will: { name: '의지·저항', color: '#EF4444', bg: '#FECACA', match: '막막한 현실이나 시련 앞에서도 꺾이지 않고 스스로 마음을 굳건히 다잡고 싶으신 분' },
+        reflect: { name: '성찰·고뇌', color: '#84CC16', bg: '#D9F99D', match: '스스로를 깊이 돌아보며 조용히 내면의 생각을 정리하고 성숙해지고 싶으신 분' },
+        love: { name: '사랑·연모', color: '#EC4899', bg: '#FBCFE8', match: '누군가를 향한 순수하고 헌신적인 마음이 가득 차올라 감정을 표현하고 싶으신 분' },
+        lonely: { name: '고독·적막', color: '#6B7280', bg: '#E5E7EB', match: '세상과 단절된 고요함 속에서 온전히 혼자만의 쓸쓸함을 마주하고 싶으신 분' },
+        hope: { name: '희망·동경', color: '#EAB308', bg: '#FEF08A', match: '어두운 시기가 걷히고 밝은 미래나 이상향을 기다리는 설렘과 용기가 필요하신 분' },
+        resent: { name: '원망·분노', color: '#F87171', bg: '#FCA5A5', match: '가슴 속에 맺힌 부당함이나 특정 대상에 대한 억눌린 미움을 시원하게 마주하고 싶으신 분' },
+        peace: { name: '평온·달관', color: '#10B981', bg: '#A7F3D0', match: '모든 번뇌와 욕심을 내려놓고 있는 그대로의 현실을 담담하게 받아들이고 싶으신 분' }
+    };
+
+    // 2. 감정 사전 (15편 전 작품 및 일반 시어 포괄 보완, 강도 가중치 1~3점)
+    const LEXICON = {
+        sad: [
+            { word: '눈물', w: 2 }, { word: '슬프', w: 2 }, { word: '슬피', w: 2 }, { word: '슬푼', w: 2 },
+            { word: '울다', w: 2 }, { word: '울며', w: 2 }, { word: '웁니다', w: 2 }, { word: '설움', w: 3 },
+            { word: '가엾', w: 2 }, { word: '애달프', w: 3 }, { word: '통곡', w: 3 }, { word: '이별', w: 2 },
+            { word: '죽음', w: 3 }, { word: '죽었', w: 3 }, { word: '죽어', w: 3 }, { word: '죽사오매', w: 2 },
+            { word: '상실', w: 2 }, { word: '서럽', w: 3 }, { word: '불설워', w: 3 }, { word: '비애', w: 3 },
+            { word: '울음', w: 2 }, { word: '한숨', w: 1 }, { word: '물어린', w: 2 }, { word: '무덤', w: 2 },
+            { word: '낮은', w: 1 }, { word: '꺼멓게', w: 2 }, { word: '연기', w: 1 }, { word: '지쳐', w: 2 },
+            { word: '서릿발', w: 2 }, { word: '고달픈', w: 2 }, { word: '섭섭하오', w: 2 }, { word: '서러워', w: 3 },
+            { word: '낡아', w: 2 }, { word: '아픔', w: 2 }, { word: '상처', w: 2 }
+        ],
+        yearn: [
+            { word: '그립', w: 3 }, { word: '그리워', w: 3 }, { word: '그리다가', w: 3 }, { word: '보고파', w: 3 },
+            { word: '고향', w: 2 }, { word: '어머니', w: 2 }, { word: '어머님', w: 2 }, { word: '추억', w: 2 },
+            { word: '기억', w: 1 }, { word: '기다림', w: 2 }, { word: '옛날', w: 1 }, { word: '돌아가', w: 2 },
+            { word: '향수', w: 3 }, { word: '鄕愁', w: 3 }, { word: '그리움', w: 3 }, { word: '기다리', w: 2 },
+            { word: '아련', w: 2 }, { word: '못잊어', w: 3 }, { word: '못 잊는', w: 3 }, { word: '일헛든', w: 2 },
+            { word: '전설', w: 1 }, { word: '傳說', w: 1 }, { word: '옛이야기', w: 2 }, { word: '총각애들', w: 1 },
+            { word: '잊었노라', w: 3 }, { word: '아니 잊고', w: 3 }, { word: '먼 훗날', w: 2 }, { word: '북간도', w: 2 }
+        ],
+        will: [
+            { word: '이겨내', w: 3 }, { word: '싸우', w: 2 }, { word: '견디', w: 2 }, { word: '일어나', w: 2 },
+            { word: '지키', w: 2 }, { word: '결코', w: 3 }, { word: '다짐', w: 2 }, { word: '나아가', w: 2 },
+            { word: '단단', w: 2 }, { word: '극복', w: 3 }, { word: '강철', w: 3 }, { word: '무지개', w: 2 },
+            { word: '목숨', w: 3 }, { word: '지조', w: 3 }, { word: '가자', w: 2 }, { word: '드리받아', w: 3 },
+            { word: '앞장', w: 2 }, { word: '칼날', w: 3 }, { word: '무릎', w: 2 }, { word: '북방', w: 2 },
+            { word: '고원', w: 2 }, { word: '가죽', w: 2 }, { word: '울리오리다', w: 3 }, { word: '굳세', w: 2 }
+        ],
+        reflect: [
+            { word: '부끄럽', w: 3 }, { word: '부끄러운', w: 3 }, { word: '참회', w: 3 }, { word: '고뇌', w: 3 },
+            { word: '생각', w: 1 }, { word: '거울', w: 1 }, { word: '내면', w: 2 }, { word: '반성', w: 3 },
+            { word: '헤아리', w: 2 }, { word: '돌아보', w: 2 }, { word: '밤', w: 1 }, { word: '이름', w: 1 },
+            { word: '백골', w: 2 }, { word: '영혼', w: 2 }, { word: '혼', w: 2 }, { word: '들여다', w: 2 },
+            { word: '듸려다', w: 2 }, { word: '눈감아', w: 2 }, { word: '반대', w: 2 }, { word: '진찰', w: 2 },
+            { word: '왼손잡이', w: 2 }, { word: '성찰', w: 3 }
+        ],
+        love: [
+            { word: '사랑', w: 3 }, { word: '님', w: 3 }, { word: '임', w: 3 }, { word: '그대', w: 2 },
+            { word: '당신', w: 2 }, { word: '마음', w: 1 }, { word: '연모', w: 3 }, { word: '품', w: 2 },
+            { word: '아끼', w: 2 }, { word: '바치', w: 3 }, { word: '영원', w: 2 }, { word: '입술', w: 2 },
+            { word: '손님', w: 2 }, { word: '기뻐', w: 2 }, { word: '기쁨', w: 2 }, { word: '안고', w: 2 },
+            { word: '건네', w: 2 }, { word: '악수', w: 2 }, { word: '엄마', w: 2 }, { word: '누나', w: 2 },
+            { word: '다정', w: 2 }, { word: '꽃', w: 1 }
+        ],
+        lonely: [
+            { word: '홀로', w: 3 }, { word: '혼자', w: 2 }, { word: '외롭', w: 3 }, { word: '쓸쓸', w: 3 },
+            { word: '적막', w: 3 }, { word: '빈방', w: 2 }, { word: '어둔 방', w: 2 }, { word: '고요', w: 1 },
+            { word: '고독', w: 3 }, { word: '그림자', w: 2 }, { word: '아무도', w: 2 }, { word: '사슴', w: 2 },
+            { word: '이방인', w: 2 }, { word: '말이 없구나', w: 2 }, { word: '소리가없소', w: 3 },
+            { word: '못하는', w: 2 }, { word: '디딜 곳조차 없다', w: 3 }, { word: '어덕', w: 2 }, { word: '빈들', w: 2 }
+        ],
+        hope: [
+            { word: '아침', w: 2 }, { word: '새벽', w: 2 }, { word: '빛', w: 2 }, { word: '해', w: 2 },
+            { word: '기대', w: 2 }, { word: '희망', w: 3 }, { word: '내일', w: 2 }, { word: '꿈', w: 2 },
+            { word: '별', w: 2 }, { word: '봄', w: 3 }, { word: '청포도', w: 2 }, { word: '광복', w: 3 },
+            { word: '그날', w: 3 }, { word: '그 날', w: 3 }, { word: '동경', w: 2 }, { word: '피어나', w: 2 },
+            { word: '용솟음', w: 3 }, { word: '자랑', w: 2 }, { word: '오면', w: 2 }, { word: '무성할', w: 2 },
+            { word: '반짝', w: 2 }, { word: '하늘', w: 1 }, { word: '푸른', w: 1 }
+        ],
+        resent: [
+            { word: '밉', w: 2 }, { word: '원망', w: 3 }, { word: '분노', w: 3 }, { word: '화', w: 2 },
+            { word: '역겨', w: 3 }, { word: '버리', w: 2 }, { word: '증오', w: 3 }, { word: '원수', w: 3 },
+            { word: '배신', w: 3 }, { word: '독', w: 2 }, { word: '빼앗긴', w: 3 }, { word: '시샘', w: 2 },
+            { word: '시새움', w: 2 }, { word: '채찍', w: 3 }, { word: '쫓기우', w: 2 }, { word: '쫓겨가', w: 2 },
+            { word: '짓밟', w: 3 }, { word: '나무라면', w: 2 }, { word: '재앙', w: 3 }, { word: '매운', w: 2 },
+            { word: '갈겨', w: 3 }, { word: '미움', w: 3 }
+        ],
+        peace: [
+            { word: '평온', w: 3 }, { word: '달관', w: 3 }, { word: '고요하', w: 2 }, { word: '가만히', w: 2 },
+            { word: '내려놓', w: 2 }, { word: '바람', w: 1 }, { word: '물결', w: 1 }, { word: '자연', w: 2 },
+            { word: '수용', w: 2 }, { word: '괜찮', w: 1 }, { word: '햇발', w: 2 }, { word: '웃음', w: 2 },
+            { word: '샘물', w: 2 }, { word: '곱게', w: 1 }, { word: '아름다운', w: 1 }, { word: '오막사리', w: 2 },
+            { word: '모여 앉어', w: 2 }, { word: '살랑살랑', w: 2 }, { word: '감자', w: 1 }, { word: '속삭이는', w: 2 },
+            { word: '맑은', w: 2 }, { word: '아랑곳', w: 2 }, { word: '강변', w: 2 }, { word: '살자', w: 2 },
+            { word: '구름', w: 1 }, { word: '숲', w: 1 }
+        ]
+    };
+
+    // 3. 시 데이터 15편
+    const POEMS = [
+        { 
+            id: 'p1', title: '별 헤는 밤', poet: '윤동주', year: '1941', source: '유고 시집 [하늘과 바람과 별과 시]', 
+            theme: '과거에 대한 그리움과 자아 성찰', 
+            interp: '가을 밤하늘의 별을 보며 유년 시절의 추억과 고향, 그리운 존재들을 하나씩 떠올리는 시입니다. 부끄러움과 자기 성찰의 고뇌 속에서도 시인은 자신의 이름을 흙으로 덮어버리는 단호한 자기희생의 의지를 다집니다. 끝내 겨울이 지나고 봄이 올 것이라는 희망으로 시상을 마무리하며 내면의 순수함을 지켜냅니다.', 
+            interpScores: { sad: 10, yearn: 40, will: 10, reflect: 30, love: 0, lonely: 0, hope: 10, resent: 0, peace: 0 },
+            text: `계절이 지나가는 하늘에는
+가을로 가득 차 있습니다.
+
+나는 아무 걱정도 없이
+가을 속의 별들을 다 헤일 듯합니다.
+
+가슴속에 하나둘 새겨지는 별을
+이제 다 못 헤는 것은
+쉬이 아침이 오는 까닭이요,
+내일 밤이 남은 까닭이요,
+아직 나의 청춘이 다하지 않은 까닭입니다.
+
+별 하나에 추억과
+별 하나에 사랑과
+별 하나에 쓸쓸함과
+별 하나에 동경과
+별 하나에 시와
+별 하나에 어머니, 어머니,
+
+어머님, 나는 별 하나에 아름다운 말 한마디씩 불러 봅니다. 소학교 때 책상을 같이 했던 아이들의 이름과, 패, 경, 옥, 이런 이국 소녀들의 이름과, 벌써 아기 어머니 된 계집애들의 이름과, 가난한 이웃 사람들의 이름과, 비둘기, 강아지, 토끼, 노새, 노루, ‘프랑시스 잠’, ‘라이너 마리아 릴케’ 이런 시인의 이름을 불러 봅니다.
+
+이네들은 너무나 멀리 있습니다.
+별이 아스라이 멀듯이.
+
+어머님,
+그리고 당신은 멀리 북간도에 계십니다.
+
+나는 무엇인지 그리워
+이 많은 별빛이 내린 언덕 위에
+내 이름자를 써 보고
+흙으로 덮어 버리었습니다.
+
+딴은 밤을 새워 우는 벌레는
+부끄러운 이름을 슬퍼하는 까닭입니다.
+
+그러나 겨울이 지나고 나의 별에도 봄이 오면
+무덤 위에 파란 잔디가 피어나듯이
+내 이름자 묻힌 언덕 위에도
+자랑처럼 풀이 무성할 거외다.
+` 
+        },
+        { 
+            id: 'p2', title: '또 다른 고향', poet: '윤동주', year: '1941', source: '유고 시집 [하늘과 바람과 별과 시]', 
+            theme: '현실적 자아의 고뇌와 이상향에 대한 동경', 
+            interp: '고향에 돌아왔지만 현실의 어둠 속에서 갈등하는 화자의 분열된 내면을 그린 작품입니다. 어두운 방 안에서 백골과 아름다운 혼이 대립하며 깊은 실존적 고뇌를 드러냅니다. 결국 현실의 안주함을 거부하고 이상향인 또 다른 고향을 향해 떠나겠다는 결연한 의지를 보여줍니다.', 
+            interpScores: { sad: 0, yearn: 15, will: 20, reflect: 40, love: 0, lonely: 10, hope: 15, resent: 0, peace: 0 },
+            text: `고향에 돌아온 날 밤에
+내 백골이 따라와 한 방에 누웠다.
+
+
+어둔 방은 우주로 통하고
+하늘에선가 소리처럼 바람이 불어온다.
+
+
+어둠 속에서 곱게 풍화작용하는
+백골을 들여다 보며
+눈물 짓는 것이 내가 우는 것이냐
+백골이 우는 것이냐
+아름다운 혼이 우는 것이냐
+
+
+지조 높은 개는
+밤을 새워 어둠을 짖는다.
+
+
+어둠을 짖는 개는
+나를 쫓는 것일 게다.
+
+
+가자 가자
+쫓기우는 사람처럼 가자.
+백골 몰래
+아름다운 또 다른 고향에 가자.` 
+        },
+        { 
+            id: 'p3', title: '굴뚝', poet: '윤동주', year: '1936', source: '유고 시집 [하늘과 바람과 별과 시]', 
+            theme: '일제 강점기 어두운 현실에 대한 안타까움', 
+            interp: '겨울날 집집마다 솟은 굴뚝에서 연기가 피어오르는 모습을 통해 당시 민중들의 고단한 삶을 비추는 시입니다. 차가운 겨울 하늘과 대비되는 굴뚝의 연기는 서민들의 애환과 삶의 무게를 상징합니다. 시인은 담담하고 절제된 시선으로 시대의 아픔을 바라보며 깊은 연민의 정서를 드러냅니다.', 
+            interpScores: { sad: 45, yearn: 0, will: 0, reflect: 25, love: 0, lonely: 20, hope: 0, resent: 0, peace: 10 },
+            text: `산골작이 오막사리 낮은 굴뚝엔
+몽기몽기 웨인연기 대낮에 솟나,
+
+감자를 굽는게지 총각애들이
+깜박깜박 검은눈이 모여 앉어서
+입술에 꺼멓게 숯을 바르고
+옛이야기 한커리에 감자 하나씩.
+
+산골작이 오막사리 낮은 굴뚝엔
+살랑살랑 솟아나네 감자 굽는내.
+
+一九三六•가을` 
+        },
+        { 
+            id: 'p4', title: '절정', poet: '이육사', year: '1940', source: '잡지 [문장]', 
+            theme: '극한 상황 속의 강인한 저항 의지', 
+            interp: '매운 계절의 채찍과 북방의 삭풍이라는 극한의 고난 속에 내몰린 화자의 모습을 선명하게 보여줍니다. 더 이상 물러설 곳조차 없는 벼랑 끝에서 화자는 오히려 눈을 감고 현실의 비극성을 냉철하게 직시합니다. 겨울을 강철로 된 무지개로 형상화함으로써 절망을 초월하는 초인적인 극복 의지를 드러냅니다.', 
+            interpScores: { sad: 10, yearn: 0, will: 60, reflect: 15, love: 0, lonely: 15, hope: 0, resent: 0, peace: 0 },
+            text: `매운 계절(季節)의 채찍에 갈겨
+마침내 북방(北方)으로 휩쓸려오다
+
+하늘도 그만 지쳐 끝난 고원(高原)
+서릿발 칼날진 그 위에 서다
+
+어데다 무릎을 꿇어야 하나?
+한발 재겨 디딜 곳조차 없다
+
+이러매 눈감아 생각해볼밖에
+겨울은 강철로 된 무지갠가보다.` 
+        },
+        { 
+            id: 'p5', title: '청포도', poet: '이육사', year: '1939', source: '문예지 [문장]', 
+            theme: '풍요롭고 평화로운 미래에 대한 염원', 
+            interp: '칠월의 청포도가 익어가는 고향의 풍경을 배경으로, 언젠가 찾아올 반가운 손님을 기다리는 마음을 노래합니다. 푸른 바다와 흰 돛단배, 은쟁반과 하이얀 모시 수건 등 선명한 색채 대비를 통해 순수하고 고결한 기다림의 정서를 극대화합니다. 암울한 시대 상황 속에서도 조국 광복이라는 밝은 희망을 잃지 않는 시인의 낙관적 태도가 돋보입니다.', 
+            interpScores: { sad: 0, yearn: 20, will: 0, reflect: 0, love: 10, lonely: 0, hope: 45, resent: 0, peace: 25 },
+            text: `내 고장 칠월은
+청포도가 익어가는 시절
+
+이 마을 전설이 주절이주절이 열리고
+먼데 하늘이 꿈꾸며 알알이 들어와 박혀
+
+하늘 밑 푸른 바다가 가슴을 열고
+흰 돛단배가 곱게 밀려서 오면
+
+내가 바라는 손님은 고달픈 몸으로
+청포(靑袍)를 입고 찾아온다고 했으니
+
+내 그를 맞아 이 포도를 따먹으면
+두 손은 함뿍 적셔도 좋으련
+
+아이야 우리 식탁엔 은쟁반에
+하이얀 모시 수건을 마련해두렴` 
+        },
+        { 
+            id: 'p6', title: '먼 후일', poet: '김소월', year: '1920(학생계) / 1925(진달래꽃)', source: '[학생계], [진달래꽃]', 
+            theme: '헤어진 임에 대한 사무치는 그리움', 
+            interp: '먼 훗날 다시 만났을 때 임을 잊었노라고 말하겠다는 반어적 표현을 통해 오히려 잊지 못하는 애절한 그리움을 드러냅니다. 어제도 오늘도 잊지 못했기에 먼 훗날에야 겨우 잊을 수 있을 것이라는 역설적 논리가 깊은 여운을 남깁니다. 간결한 운율과 소박한 시어 속에 한국인의 전통적인 이별의 정한이 오롯이 담겨 있습니다.', 
+            interpScores: { sad: 30, yearn: 50, will: 0, reflect: 0, love: 20, lonely: 0, hope: 0, resent: 0, peace: 0 },
+            text: `먼 훗날 당신이 찾으시면
+그때에 내 말이 잊었노라
+
+당신이 속으로 나무라면
+무척 그리다가 잊었노라
+
+그래도 당신이 나무라면
+믿기지 않아서 잊었노라
+
+오늘도 어제도 아니 잊고
+먼 훗날 그때에 잊었노라` 
+        },
+        { 
+            id: 'p7', title: '접동새', poet: '김소월', year: '1923', source: '[진달래꽃]', 
+            theme: '혈육의 한과 서러운 비애', 
+            interp: '의붓어미의 시샘으로 억울하게 죽어 접동새가 된 누이의 설화를 바탕으로 한 서정시입니다. 아홉이나 남아 되는 오라버니를 잊지 못해 밤마다 산을 옮겨 다니며 우는 누이의 모습에서 깊은 한과 비애가 느껴집니다. 민요적 율격과 반복적인 시어 배치를 통해 슬픔과 원망의 정서를 애절하게 극대화하고 있습니다.', 
+            interpScores: { sad: 50, yearn: 15, will: 0, reflect: 0, love: 0, lonely: 0, hope: 0, resent: 35, peace: 0 },
+            text: `접동
+접동
+아우래비 접동
+
+진두강 가람가에 살던 누나는
+진두강 앞마을에
+와서 웁니다
+
+옛날, 우리나라
+먼 뒤쪽의
+진두강 가람가에 살던 누나는
+의붓어미 시샘에 죽었습니다
+
+누나라고 불러보랴
+오오 불설워
+시새움에 몸이 죽은 우리 누나는
+죽어서 접동새가 되었습니다
+
+아웁이나 남아되던 오랩동생을
+죽어서도 못잊어 차마 못잊어
+야삼경 남 다 자는 밤이 깊으면
+이 산 저 산 옮아가며 슬피 웁니다.` 
+        },
+        { 
+            id: 'p8', title: '그 날이 오면', poet: '심훈', year: '1949', source: '유고 시집 [그 날이 오면]', 
+            theme: '조국 광복에 대한 격정적인 염원', 
+            interp: '삼각산이 일어나 더덩실 춤이라도 출 그 날, 즉 조국 광복의 순간을 향한 폭발적인 감격과 열망을 노래한 시입니다. 광복의 기쁨을 누릴 수만 있다면 자신의 목숨과 육신이 산산조각 나더라도 기꺼이 바치겠다는 비장한 각오가 담겨 있습니다. 억눌렸던 분노와 슬픔이 희망의 환희로 승화되는 격정적인 어조가 특징입니다.', 
+            interpScores: { sad: 0, yearn: 0, will: 45, reflect: 0, love: 0, lonely: 0, hope: 45, resent: 10, peace: 0 },
+            text: `그날이 오면 그날이 오면은
+삼각산(三角山)이 일어나 더덩실 춤이라도 추고
+한강(漢江)물이 뒤집혀 용솟음칠 그날이,
+이 목숨이 끊지기 전에 와 주기만 하량이면,
+나는 밤하늘에 날으는 까마귀와 같이
+종로(鍾路)의 인경(人磬)을 머리로 드리받아 울리오리다,
+두개골(頭蓋骨)은 깨어져 산산(散散)조각이 나도
+기뻐서 죽사오매 오히려 무슨 한(恨)이 남으오리까.
+
+그날이 와서 오오 그날이 와서
+육조(六曹) 앞 넓은 길을 울며 뛰며 딩굴어도
+그래도 넘치는 기쁨에 가슴이 미어질 듯 하거던든
+드는 칼로 이 몸의 가죽이라도 벗겨서
+커다란 북(鼓)을 만들어 둘처메고는
+여러분의 행렬(行列)에 앞장을 서오리다,
+우렁찬 그 소리를 한 번이라도 듣기만 하면
+그 자리에 꺼꾸러져도 눈을 감겠소이다` 
+        },
+        { 
+            id: 'p9', title: '떠나가는 배', poet: '박용철', year: '1930', source: '문예지 [시문학]', 
+            theme: '고향을 떠나는 상실감과 비애', 
+            interp: '정든 고향과 사랑하는 이들을 뒤로하고 정처 없이 떠나야만 하는 화자의 애절한 심정을 담은 시입니다. 내 두 손은 무엇을 찾으며 내 눈은 무엇을 보려 하는가라는 탄식을 통해 상실감과 막막함을 토로합니다. 배가 떠나가는 물리적 이동을 통해 일제 강점기 유랑민의 보편적인 고독과 슬픔을 서정적으로 형상화했습니다.', 
+            interpScores: { sad: 45, yearn: 25, will: 0, reflect: 0, love: 0, lonely: 30, hope: 0, resent: 0, peace: 0 },
+            text: `나 두 야 간다
+나의 이 젊은 나이를
+눈물로야 보낼거냐
+나 두 야 가련다
+
+안윽한 이 항구-ㄴ들 손쉽게야 버릴거냐
+안개같이 물어린 눈에도 비최나니
+골잭이마다 발에 익은 뫼ㅅ부리모양
+주름ㅅ살도 눈에 익은 아- 사랑하든 사람들
+
+버리고 가는이도 못 잊는 마음
+쫓겨가는 마음인들 무어 다를거냐
+돌아다보는 구름에는 바람이 희살짓는다
+앞대일 어덕인들 마련이나 있을거냐
+
+나 두 야 가련다
+나의 이 젊은 나이를
+눈물로야 보낼거냐
+나 두 야 간다` 
+        },
+        { 
+            id: 'p10', title: '사슴', poet: '노천명', year: '1938', source: '[산호림]', 
+            theme: '고독한 내면과 잃어버린 세계에 대한 향수', 
+            interp: '모가지가 길어서 슬픈 사슴의 외형적 이미지를 화자 자신의 고독하고 고고한 내면과 동일시한 작품입니다. 관이 향기로운 너라는 표현을 통해 현실과 타협하지 않는 자존심과 귀족적 품위를 드러냅니다. 물 속의 제 그림자를 들여다보며 잃어버린 전설을 생각하는 모습에서 깊은 적막감과 향수가 배어납니다.', 
+            interpScores: { sad: 20, yearn: 25, will: 0, reflect: 10, love: 0, lonely: 45, hope: 0, resent: 0, peace: 0 },
+            text: `목아지가 길어서 슬푼 짐승이여
+언제나 점잔은편 말이 없구나
+冠이 香그러운 너는
+무척 높은 族屬 이였나 부다
+
+
+물속의 제 그림자를 듸려다 보고
+일헛든 傳說을 생각해 내곤
+어찌 할수 없는 鄕愁에
+슬푼목아지를하고 먼데山을 처다본다` 
+        },
+        { 
+            id: 'p11', title: '빼앗긴 들에도 봄은 오는가', poet: '이상화', year: '1926', source: '[개벽]', 
+            theme: '국권 상실의 비애와 회복에 대한 염원', 
+            interp: '아름다운 봄이 찾아왔음에도 불구하고 주권을 빼앗겼기에 진정한 봄을 누릴 수 없는 식민지 지식인의 비통함을 노래합니다. 생명력 넘치는 들판의 풍경과 그 들을 빼앗긴 현실의 극명한 대비를 통해 분노와 슬픔의 정서를 고조시킵니다. 그러나 절망에 머무르지 않고 잃어버린 들을 되찾겠다는 간절한 희망을 품으며 끝을 맺습니다.', 
+            interpScores: { sad: 25, yearn: 0, will: 15, reflect: 0, love: 0, lonely: 0, hope: 25, resent: 35, peace: 0 },
+            text: `지금은 남의 땅―빼앗긴 들에도 봄은 오는가?
+
+나는 온몸에 햇살을 받고
+푸른 하늘 푸른 들이 맞붙은 곳으로
+가르마같은 논길을 따라 꿈속을 가듯 걸어만 간다.
+
+입술을 다문 하늘아 들아
+내 맘에는 내 혼자 온 것 같지를 않구나
+네가 끌었느냐 누가 부르더냐 답답해라 말을 해다오.
+
+바람은 내 귀에 속삭이며
+한 자국도 서지 마라 옷자락을 흔들고
+종다리는 울타리 너머 아가씨같이 구름 뒤에서 반갑다 웃네.
+
+고맙게 잘 자란 보리밭아
+간밤 자정이 넘어 내리는 고운 비로
+너는 삼단같은 머리를 감았구나 내 머리조차 가뿐하다.
+
+혼자라도 가쁘게나 가자
+마른 논을 안고 도는 착한 도랑이
+젖먹이 달래는 노래를 하고 제 혼자 어깨춤만 추고 가네.
+
+나비 제비야 깝치지 마라
+민들레 제비꽃에도 인사를 해야지
+아주까리 기름을 바른 이가 김을 매는 그 들이라 다 보고 싶다.
+
+내 손에 호미를 쥐여 다오
+살찐 젖가슴과 같은 부드러운 이 흙을
+발목이 시리도록 밟아도 보고 좋은 땀조차 흘리고 싶다.
+
+강가에 나온 아이와 같이
+짬도 모르고 끝도 없이 닫는 내 혼아
+무엇을 찾느냐 어디로 갔느냐 우습다 답을 하려무나.
+
+나는 온몸에 풋내를 띄고
+푸른 웃음 푸른 설음 어우러진 사이로
+다리를 절며 하루를 걷는다 아마도 봄 신령이 지폈나보다.
+그러나 지금은― 들을 빼앗겨 봄조차 빼앗기겠네` 
+        },
+        { 
+            id: 'p12', title: '거울', poet: '이상', year: '1933', source: '통권 5호 [가톨릭소년]', 
+            theme: '현대인의 자아 분열과 단절된 고독', 
+            interp: '거울 속의 나와 거울 밖의 내가 서로 소통하지 못하고 단절되어 있는 기이한 상황을 통해 현대인의 자아 분열을 그린 시입니다. 왼손잡이인 거울 속 나는 내 악수를 받을 줄 모르는 타인으로 존재하며 깊은 소외감과 고독을 유발합니다. 띄어쓰기를 의도적으로 배제한 실험적 형식을 통해 내면의 불안과 심리적 고뇌를 효과적으로 전달합니다.', 
+            interpScores: { sad: 0, yearn: 0, will: 0, reflect: 45, love: 0, lonely: 45, hope: 0, resent: 10, peace: 0 },
+            text: `거울속에는소리가없소
+저렇게까지조용한세상은참없을것이오
+
+거울속에도내게귀가있소
+내말을못알아듣는딱한귀가두개나있소
+
+거울속의나는왼손잡이오
+내악수(握手)를받을줄모르는―악수(握手)를모르는왼손잡이오
+
+거울때문에나는거울속의나를만져보지를못하는구료마는
+거울아니었던들내가어찌거울속의나를만나보기만이라도했겠소
+
+나는지금(至今)거울을안가졌소마는거울속에는늘거울속의내가있소
+잘은모르지만외로된사업(事業)에골몰할께요
+
+거울속의나는참나와는반대(反對)요마는
+또꽤닮았소
+나는거울속의나를근심하고진찰(診察)할수없으니퍽섭섭하오
+` 
+        },
+        { 
+            id: 'p13', title: '고향', poet: '정지용', year: '1932', source: '[동방평론]', 
+            theme: '고향 상실의 비애와 쓸쓸한 고독', 
+            interp: '오랜 그리움 끝에 고향에 돌아왔지만 예전의 정취를 잃어버린 낯선 풍경 앞에서 느끼는 상실감을 표현한 시입니다. 어린 시절 뛰놀던 곳은 변해버렸고, 화자 스스로도 이미 고향의 일부가 되지 못한 이방인이 되었음을 깨닫습니다. 절제된 언어와 차분한 어조 속에 고향을 잃은 근대인의 깊은 고독과 슬픔이 스며 있습니다.', 
+            interpScores: { sad: 35, yearn: 30, will: 0, reflect: 0, love: 0, lonely: 35, hope: 0, resent: 0, peace: 0 },
+            text: `고향에 고향에 돌아와도
+그리던 고향은 아니러뇨.
+
+산꿩이 알을 품고
+뻐꾸기 제 철에 울건만.
+
+마음은 제 고향 지니지 않고
+머언 항구로 떠도는 구름.
+
+오늘도 뫼 끝에 홀로 오르니
+흰 점 꽃이 인정스레 웃고,
+
+어린 시절에 불던 풀피리 소리 아니 나고
+메마른 입술에 쓰디쓰다.
+
+고향에 고향에 돌아와도
+그리던 하늘만이 높푸르구나.` 
+        },
+        { 
+            id: 'p14', title: '나룻배와 행인', poet: '한용운', year: '1926', source: '[님의 침묵]', 
+            theme: '임을 향한 헌신적인 사랑과 기다림', 
+            interp: '화자 자신을 나룻배에, 사랑하는 임을 행인에 비유하여 조건 없는 희생과 헌신적인 사랑의 태도를 노래한 시입니다. 행인이 흙발로 자신을 짓밟고 지나가더라도 아랑곳하지 않고 묵묵히 강을 건네주겠다는 지고지순한 마음을 보여줍니다. 날마다 낡아가면서도 임이 오실 날만을 기다리는 모습에서 숭고한 사랑과 변치 않는 희망이 느껴집니다.', 
+            interpScores: { sad: 10, yearn: 20, will: 0, reflect: 0, love: 50, lonely: 0, hope: 20, resent: 0, peace: 0 },
+            text: `나는 나룻배
+당신은 행인(行人)
+ 
+당신은 흙발로 나를 짓밟습니다
+나는 당신을 안고 물을 건너갑니다
+나는 당신을 안으면 깊으나 옅으나 급한 여울이나 건너갑니다
+
+만일 당신이 아니 오시면 나는 바람을 쐬고 눈비를 맞으며 밤에서 낮까지 당신을 기다리고 있습니다
+당신은 물만 건너면 나를 돌아보지도 않고 가십니다 그려
+
+그러나 당신이 언제든지 오실 줄만은 알아요
+나는 당신을 기다리면서 날마다날마다 낡아갑니다
+
+나는 나룻배
+당신은 행인` 
+        },
+        { 
+            id: 'p15', title: '돌담에 속삭이는 햇발', poet: '김영랑', year: '1930', source: '[시문학 2호]', 
+            theme: '순수하고 평온한 내면 세계의 추구', 
+            interp: '돌담에 비치는 따스한 햇살과 풀 아래 웃음짓는 샘물 같은 맑고 투명한 심상을 통해 화자의 순수한 영혼을 노래합니다. 어지러운 현실의 번뇌에서 벗어나 자연과 조화를 이루는 평온하고 달관적인 내면 상태를 유려한 음악성으로 풀어냈습니다. 부드러운 울림소리의 반복을 통해 읽는 이에게도 고요한 위안과 평화를 선사하는 작품입니다.', 
+            interpScores: { sad: 0, yearn: 0, will: 0, reflect: 10, love: 0, lonely: 0, hope: 25, resent: 0, peace: 65 },
+            text: `돌담에 속삭이는 햇발같이
+풀 아래 웃음 짓는 샘물같이
+내 마음 고요히 고운 봄 길 위에
+오늘 하루 하늘을 우러르고 싶다
+
+새악시 볼에 떠 오는 부끄럼같이
+시의 가슴 살포시 젖는 물결같이
+보드레한 에메랄드 얇게 흐르는
+실비단 하늘을 바라보고 싶다
+` 
+        }
+    ];
+
+    let currentIndex = 0;
+    let isCustomMode = false;
+    let lexiconWeight = 0.50; // 기본값 50%
+    let radarChartObj = null;
+    let modalRadarChartObj = null;
+    let currentChartState = null;
+
+    // HTML 특수문자 이스케이프 (직접 입력 시 안전 처리)
+    function escapeHtml(str) {
+        return str
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    // 순수 텍스트 감정 사전 분석 공통 함수
+    function analyzeRawText(rawText) {
+        let lexRawScores = { sad:0, yearn:0, will:0, reflect:0, love:0, lonely:0, hope:0, resent:0, peace:0 };
+        let totalWeightedScore = 0;
+        let wordMap = {};
+        let detectedList = [];
+
+        for (let emo in LEXICON) {
+            LEXICON[emo].forEach(item => {
+                let regex = new RegExp(item.word, 'g');
+                let matches = rawText.match(regex);
+                let count = matches ? matches.length : 0;
+                
+                if (count > 0) {
+                    let weightedPoint = count * item.w;
+                    lexRawScores[emo] += weightedPoint;
+                    totalWeightedScore += weightedPoint;
+                    wordMap[escapeHtml(item.word)] = { emo: emo, w: item.w };
+                    detectedList.push({ word: item.word, emo: emo, w: item.w, index: rawText.indexOf(item.word) });
+                }
+            });
+        }
+
+        // 본문 등장 순서대로 정렬된 고유 근거 시어 목록
+        detectedList.sort((a, b) => a.index - b.index);
+
+        // 태그 중복 치환 없이 한 번에 안전하게 하이라이트 처리
+        let safeText = escapeHtml(rawText);
+        let matchedWords = Object.keys(wordMap).sort((a, b) => b.length - a.length);
+        let highlightedText = safeText;
+        
+        if (matchedWords.length > 0) {
+            let escapedWords = matchedWords.map(word => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+            let combinedRegex = new RegExp(`(${escapedWords.join('|')})`, 'g');
+            highlightedText = safeText.replace(combinedRegex, (match) => {
+                let info = wordMap[match];
+                return `<span class="emo-${info.emo}" data-tooltip="${EMOS[info.emo].name} (시어 가중치: ${info.w}점)">${match}</span>`;
+            });
+        }
+
+        // 감정 사전 점수 백분율화 (0~100)
+        let lexPercentScores = {};
+        for (let emo in lexRawScores) {
+            lexPercentScores[emo] = totalWeightedScore > 0 
+                ? (lexRawScores[emo] / totalWeightedScore) * 100 
+                : 0;
+        }
+
+        return { lexPercentScores, totalWeightedScore, highlightedText, detectedList };
+    }
+
+    // 수록 시 통합 감정 분석 로직 (해석 + 감정 사전 가중치 결합)
+    function analyzePoem(poem, w) {
+        const rawResult = analyzeRawText(poem.text);
+
+        let combinedScores = {};
+        let sumCombined = 0;
+        for (let emo in EMOS) {
+            let interpVal = poem.interpScores[emo] || 0;
+            let lexVal = rawResult.lexPercentScores[emo] || 0;
+            let effectiveW = rawResult.totalWeightedScore > 0 ? w : 0;
+            let val = interpVal * (1 - effectiveW) + lexVal * effectiveW;
+            combinedScores[emo] = val;
+            sumCombined += val;
+        }
+
+        let finalScores = {};
+        let dominant = 'sad';
+        let maxScore = -1;
+
+        for (let emo in combinedScores) {
+            finalScores[emo] = sumCombined > 0 ? Math.round((combinedScores[emo] / sumCombined) * 100) : 0;
+            if (finalScores[emo] > maxScore) {
+                maxScore = finalScores[emo];
+                dominant = emo;
+            }
+        }
+
+        return { scores: finalScores, dominant, highlightedText: rawResult.highlightedText };
+    }
+
+    // 유사도 계산 (코사인 유사도)
+    function calcSimilarity(scoresA, scoresB) {
+        let dot = 0, normA = 0, normB = 0;
+        for (let emo in EMOS) {
+            let a = scoresA[emo] || 0;
+            let b = scoresB[emo] || 0;
+            dot += a * b;
+            normA += a * a;
+            normB += b * b;
+        }
+        return (normA > 0 && normB > 0) ? dot / (Math.sqrt(normA) * Math.sqrt(normB)) : 0;
+    }
+
+    // 레이더 차트 그리기 공통 함수
+    function drawRadarChart(title, scores, color) {
+        const chartLabels = Object.values(EMOS).map(e => e.name);
+        const chartData = Object.keys(EMOS).map(k => scores[k] || 0);
+        currentChartState = { title, labels: chartLabels, data: chartData, color };
+
+        const ctx = document.getElementById('radarChart').getContext('2d');
+        if (radarChartObj) radarChartObj.destroy();
+        radarChartObj = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: chartLabels,
+                datasets: [{
+                    label: '감정 비율(%)',
+                    data: chartData,
+                    backgroundColor: `${color}33`,
+                    borderColor: color,
+                    borderWidth: 2,
+                    pointRadius: 3,
+                    pointBackgroundColor: color
+                }]
+            },
+            options: {
+                animation: { duration: 150 },
+                scales: { r: { min: 0, max: 100, ticks: { stepSize: 25, display: false } } },
+                plugins: { legend: { display: false } },
+                maintainAspectRatio: false
+            }
+        });
+    }
+
+    // 수록 작품(15편) 화면 렌더링 함수
+    function renderPoem(index) {
+        isCustomMode = false;
+        currentIndex = index;
+        const poem = POEMS[index];
+        const analysis = analyzePoem(poem, lexiconWeight);
+
+        // 슬라이더 활성화 복구
+        const slider = document.getElementById('weightSlider');
+        slider.disabled = false;
+        document.getElementById('weightValueText').innerText = `${Math.round(lexiconWeight * 100)}%`;
+        document.getElementById('weightFormulaText').innerText = '최종 점수 = 해석 기반 프로필 × (1 - w) + 감정 사전 점수 × w';
+
+        // 목록 활성화
+        document.querySelectorAll('.poem-list li').forEach((li, i) => {
+            li.classList.toggle('active', i === index);
+        });
+
+        // 본문 영역 업데이트
+        document.getElementById('poemTitle').innerText = poem.title;
+        document.getElementById('poemMeta').innerText = `${poem.poet} | ${poem.year} | ${poem.source}`;
+        document.getElementById('poemText').innerHTML = analysis.highlightedText;
+        document.getElementById('customExtraArea').innerHTML = '';
+
+        // 1. 지배 정서 막대 차트 (상위 4개 감정)
+        const sortedEmos = Object.entries(analysis.scores)
+            .sort((a, b) => b[1] - a[1])
+            .filter(entry => entry[1] > 0)
+            .slice(0, 4);
+
+        const barsHtml = sortedEmos.map(([emo, val]) => `
+            <div style="display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:4px;">
+                <span><strong>${EMOS[emo].name}</strong></span>
+                <span>${val}%</span>
+            </div>
+            <div class="bar-container">
+                <div class="bar-fill" style="width:${val}%; background-color:${EMOS[emo].color};"></div>
+            </div>
+        `).join('');
+        document.getElementById('emotionBars').innerHTML = barsHtml || '<p style="color:var(--text-muted); font-size:0.9rem;">감정 비율 데이터가 없습니다.</p>';
+
+        // 2. 감상과 해석
+        document.getElementById('poemTheme').innerText = poem.theme;
+        document.getElementById('poemInterp').innerText = poem.interp;
+
+        // 3. 독자 상태 매칭
+        const domEmo = EMOS[analysis.dominant];
+        document.getElementById('readerMatchText').innerHTML =
+            `<strong>[${domEmo.name} ${analysis.scores[analysis.dominant]}%]</strong> ${domEmo.match}`;
+
+        // 4. 비슷한 감성의 시 추천 (상위 3편)
+        const similarities = POEMS.map((otherPoem, idx) => {
+            if (idx === index) return null;
+            const otherAnalysis = analyzePoem(otherPoem, lexiconWeight);
+            return {
+                index: idx,
+                title: otherPoem.title,
+                poet: otherPoem.poet,
+                sim: calcSimilarity(analysis.scores, otherAnalysis.scores)
+            };
+        }).filter(Boolean).sort((a, b) => b.sim - a.sim).slice(0, 3);
+
+        document.getElementById('recommendList').innerHTML = similarities.map(item => `
+            <a href="#" onclick="event.preventDefault(); renderPoem(${item.index});">
+                ${item.title} <span style="color:var(--text-muted); font-size:0.85rem;">(${item.poet} · 유사도 ${Math.round(item.sim * 100)}%)</span>
+            </a>
+        `).join('');
+
+        // 5. 감정 프로필 레이더 차트
+        drawRadarChart(poem.title, analysis.scores, domEmo.color);
+    }
+
+    // 직접 입력한 시 분석 함수 (감정 사전 전용)
+    function analyzeCustomPoem() {
+        const titleInput = document.getElementById('customTitle').value.trim();
+        const textInput = document.getElementById('customText').value.trim();
+
+        if (!textInput) {
+            alert('분석할 시 본문을 입력해 주세요.');
+            document.getElementById('customText').focus();
+            return;
+        }
+
+        isCustomMode = true;
+        const title = titleInput || '직접 입력한 시';
+
+        // 왼쪽 목록 선택 해제
+        document.querySelectorAll('.poem-list li').forEach(li => li.classList.remove('active'));
+
+        // 슬라이더 비활성화 및 사전 전용 표시
+        document.getElementById('weightSlider').disabled = true;
+        document.getElementById('weightValueText').innerText = '100% (사전 전용)';
+        document.getElementById('weightFormulaText').innerText = '직접 입력한 시는 해석 데이터 없이 감정 사전 점수(w = 100%)로만 분석됩니다.';
+
+        const rawResult = analyzeRawText(textInput);
+
+        // 본문 헤더 업데이트
+        document.getElementById('poemTitle').innerText = title;
+        document.getElementById('poemMeta').innerText = '직접 입력 | 감정 사전 기반 분석';
+        document.getElementById('poemText').innerHTML = rawResult.highlightedText;
+
+        // 감지된 시어가 없을 때 안내 문구 출력 (예외 처리)
+        if (rawResult.totalWeightedScore === 0) {
+            document.getElementById('customExtraArea').innerHTML = `
+                <div class="no-match-banner">
+                    <strong>⚠️ 감지된 감정 시어가 없습니다.</strong><br>
+                    입력하신 시 구절에서 감정 사전에 등록된 시어가 발견되지 않아 정서 비율을 산출할 수 없습니다. 
+                    감정을 드러내는 시어(예: 그리움, 눈물, 바람, 별, 사랑, 고향 등)가 포함된 시 구절을 입력해 다시 분석해 보세요.
+                </div>
+            `;
+            document.getElementById('emotionBars').innerHTML =
+                '<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">감지된 시어가 없어 정서 비율을 표시할 수 없습니다.</p>';
+            document.getElementById('poemTheme').innerText = '감정 시어 미감지';
+            document.getElementById('poemInterp').innerText =
+                '감정 사전에 일치하는 시어가 없어 자동 해석을 생성할 수 없습니다. 다른 시 구절을 입력하거나 왼쪽 수록 작품 15편을 선택해 보세요.';
+            document.getElementById('readerMatchText').innerText =
+                '감지된 감정 시어가 없어 독자 상태를 매칭할 수 없습니다.';
+            document.getElementById('recommendList').innerHTML =
+                '<p style="color:var(--text-muted); font-size:0.9rem; margin:0;">감정 시어가 감지되면 15편 중 가장 비슷한 시를 추천해 드립니다.</p>';
+
+            const zeroScores = { sad:0, yearn:0, will:0, reflect:0, love:0, lonely:0, hope:0, resent:0, peace:0 };
+            drawRadarChart(title, zeroScores, '#64748B');
+            return;
+        }
+
+        // 정상 감지된 경우: 백분율 반올림 및 지배 정서 도출
+        let finalScores = {};
+        let dominant = 'sad';
+        let maxScore = -1;
+
+        for (let emo in EMOS) {
+            finalScores[emo] = Math.round(rawResult.lexPercentScores[emo]);
+            if (finalScores[emo] > maxScore) {
+                maxScore = finalScores[emo];
+                dominant = emo;
+            }
+        }
+
+        // 본문 하단 근거 시어 칩 표시
+        const chipsHtml = rawResult.detectedList.map(item => `
+            <span class="word-chip" style="background-color:${EMOS[item.emo].bg};">
+                ${escapeHtml(item.word)} <small style="color:#475569; font-weight:500;">(${EMOS[item.emo].name})</small>
+            </span>
+        `).join('');
+        document.getElementById('customExtraArea').innerHTML = `
+            <div class="detected-words-box">
+                <strong>찾은 근거 시어:</strong> ${chipsHtml}
+            </div>
+        `;
+
+        // 1. 지배 정서 막대 차트
+        const sortedEmos = Object.entries(finalScores)
+            .sort((a, b) => b[1] - a[1])
+            .filter(entry => entry[1] > 0)
+            .slice(0, 4);
+
+        document.getElementById('emotionBars').innerHTML = sortedEmos.map(([emo, val]) => `
+            <div style="display:flex; justify-content:space-between; font-size:0.9rem; margin-bottom:4px;">
+                <span><strong>${EMOS[emo].name}</strong></span>
+                <span>${val}%</span>
+            </div>
+            <div class="bar-container">
+                <div class="bar-fill" style="width:${val}%; background-color:${EMOS[emo].color};"></div>
+            </div>
+        `).join('');
+
+        // 4. 수록 시 15편 중 가장 비슷한 시 계산
+        const similarities = POEMS.map((otherPoem, idx) => {
+            const otherAnalysis = analyzePoem(otherPoem, lexiconWeight);
+            return {
+                index: idx,
+                title: otherPoem.title,
+                poet: otherPoem.poet,
+                sim: calcSimilarity(finalScores, otherAnalysis.scores)
+            };
+        }).sort((a, b) => b.sim - a.sim).slice(0, 3);
+
+        const bestMatch = similarities[0];
+
+        // 2. 자동 생성 감상과 해석
+        const topTwoLabels = sortedEmos.slice(0, 2).map(([emo]) => EMOS[emo].name);
+        document.getElementById('poemTheme').innerText =
+            topTwoLabels.length > 1 ? `${topTwoLabels[0]}과(와) ${topTwoLabels[1]}의 정서` : `${topTwoLabels[0]}의 정서`;
+
+        const topSummary = sortedEmos.slice(0, 2)
+            .map(([emo, val]) => `'${EMOS[emo].name}'(${val}%)`)
+            .join('과 ');
+        const quotedWords = rawResult.detectedList.map(d => `'${d.word}'`).join(', ');
+
+        document.getElementById('poemInterp').innerText =
+            `감정 사전으로 분석하면 이 시는 ${topSummary}의 정서가 두드러집니다. ` +
+            `판단의 근거가 된 시어는 ${quotedWords}입니다. ` +
+            `수록 시 15편 가운데 감정 구성이 가장 비슷한 시는 「${bestMatch.title}」(${bestMatch.poet})이며 유사도는 ${Math.round(bestMatch.sim * 100)}%입니다. ` +
+            `사전 기반 분석은 반어나 역설을 읽지 못하므로, 해석은 시어의 문맥과 함께 확인해야 합니다.`;
+
+        // 3. 독자 상태 매칭
+        const domEmo = EMOS[dominant];
+        document.getElementById('readerMatchText').innerHTML =
+            `<strong>[${domEmo.name} ${finalScores[dominant]}%]</strong> ${domEmo.match}`;
+
+        // 4. 비슷한 감성의 시 추천 리스트
+        document.getElementById('recommendList').innerHTML = similarities.map(item => `
+            <a href="#" onclick="event.preventDefault(); renderPoem(${item.index});">
+                ${item.title} <span style="color:var(--text-muted); font-size:0.85rem;">(${item.poet} · 유사도 ${Math.round(item.sim * 100)}%)</span>
+            </a>
+        `).join('');
+
+        // 5. 감정 프로필 레이더 차트
+        drawRadarChart(title, finalScores, domEmo.color);
+    }
+
+    // 감정 프로필 중앙 확대 모달 열기/닫기
+    function openRadarModal() {
+        if (!currentChartState) return;
+        const modal = document.getElementById('radarModal');
+        document.getElementById('modalRadarTitle').innerText = `${currentChartState.title} - 감정 프로필`;
+        modal.classList.add('show');
+
+        const ctx = document.getElementById('modalRadarChart').getContext('2d');
+        if (modalRadarChartObj) modalRadarChartObj.destroy();
+        modalRadarChartObj = new Chart(ctx, {
+            type: 'radar',
+            data: {
+                labels: currentChartState.labels,
+                datasets: [{
+                    label: '감정 비율(%)',
+                    data: currentChartState.data,
+                    backgroundColor: `${currentChartState.color}33`,
+                    borderColor: currentChartState.color,
+                    borderWidth: 2.5,
+                    pointRadius: 4,
+                    pointBackgroundColor: currentChartState.color,
+                    pointBorderColor: '#fff'
+                }]
+            },
+            options: {
+                animation: { duration: 200 },
+                scales: {
+                    r: {
+                        min: 0,
+                        max: 100,
+                        ticks: { stepSize: 20, backdropColor: 'transparent', font: { size: 11 } },
+                        pointLabels: { font: { size: 13, weight: '600' }, color: '#1E293B' }
+                    }
+                },
+                plugins: { legend: { display: false } },
+                maintainAspectRatio: false
+            }
+        });
+    }
+
+    function closeRadarModal() {
+        document.getElementById('radarModal').classList.remove('show');
+    }
+
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeRadarModal();
+    });
+
+    // 슬라이더 실시간 이벤트 연결 (0~100% 1단위 조절)
+    document.getElementById('weightSlider').addEventListener('input', function(e) {
+        if (isCustomMode) return;
+        const val = parseInt(e.target.value, 10);
+        lexiconWeight = val / 100;
+        document.getElementById('weightValueText').innerText = `${val}%`;
+        renderPoem(currentIndex);
+    });
+
+    // 사이드바 목록 초기화 및 첫 번째 시 렌더링
+    const poemListEl = document.getElementById('poemList');
+    POEMS.forEach((p, idx) => {
+        const li = document.createElement('li');
+        li.innerText = `${idx + 1}. ${p.title}`;
+        li.onclick = () => renderPoem(idx);
+        poemListEl.appendChild(li);
+    });
+
+    renderPoem(0);
+</script>
+</body>
+</html>
